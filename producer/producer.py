@@ -1,25 +1,36 @@
 import json
-import time
 
 from kafka import KafkaProducer
+from sseclient import SSEClient as EventSource
 
-# The setup remains identical
+# 1. Setup Producer
 producer = KafkaProducer(
     bootstrap_servers="localhost:9092",
     value_serializer=lambda v: json.dumps(v).encode("utf-8"),
 )
 
-print("Producer started. Sending 10 messages...")
+url = "https://stream.wikimedia.org/v2/stream/recentchange"
+headers = {"User-Agent": "KafkaWikiBot/1.0 (vimal@example.com)"}
 
-for i in range(10):
-    data = {"event": "agent_task", "id": i}
+print("Starting Producer: Streaming Wikimedia to Kafka...")
 
-    # .send() returns a future; it is asynchronous by default
-    producer.send("test-topic", data)
-    print(f"Sent: {data}")
+try:
+    for event in EventSource(url, headers=headers):
+        if event.event == "message":
+            try:
+                change = json.loads(event.data)
 
-    time.sleep(1)
+                # Send the whole dictionary to Kafka
+                producer.send("wiki-changes", value=change)
 
-# Ensure all messages are actually sent before the script exits
-producer.flush()
-print("All messages flushed to broker.")
+                # Optional: visual feedback in terminal
+                if change.get("server_name") == "en.wikipedia.org":
+                    print(f"Sent to Kafka: {change['title']}")
+
+            except (ValueError, KeyError):
+                pass
+except KeyboardInterrupt:
+    print("Producer stopping...")
+finally:
+    producer.flush()
+    producer.close()
