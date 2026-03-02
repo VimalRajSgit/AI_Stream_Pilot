@@ -1,6 +1,8 @@
 import json
+import time
 
 from kafka import KafkaConsumer, KafkaProducer
+from kafka.errors import NoBrokersAvailable
 from transformers import pipeline
 
 # ─────────────────────────────────────────
@@ -12,29 +14,50 @@ classifier = pipeline(
     model="typeform/distilbert-base-uncased-mnli",  # lightweight zero-shot
 )
 LABELS = ["vandalism", "legitimate edit", "bot edit", "minor fix"]
-print("Model loaded. Starting processor...")
+print("Model loaded!")
+
 
 # ─────────────────────────────────────────
-# 2. Kafka Consumer (reads from producer)
+# 2. Wait for Kafka to be ready
+# ─────────────────────────────────────────
+def wait_for_kafka(retries=10, delay=5):
+    for attempt in range(retries):
+        try:
+            test_producer = KafkaProducer(bootstrap_servers="kafka:9092")
+            test_producer.close()
+            print("Kafka is ready!")
+            return
+        except NoBrokersAvailable:
+            print(
+                f"Kafka not ready, retrying in {delay}s... (attempt {attempt + 1}/{retries})"
+            )
+            time.sleep(delay)
+    raise Exception("Could not connect to Kafka after multiple retries.")
+
+
+wait_for_kafka()
+
+# ─────────────────────────────────────────
+# 3. Kafka Consumer (reads from producer)
 # ─────────────────────────────────────────
 consumer = KafkaConsumer(
     "wiki-changes",
-    bootstrap_servers="localhost:9092",
+    bootstrap_servers="kafka:9092",
     auto_offset_reset="latest",
     group_id="ai-processors",
     value_deserializer=lambda x: json.loads(x.decode("utf-8")),
 )
 
 # ─────────────────────────────────────────
-# 3. Kafka Producer (sends results forward)
+# 4. Kafka Producer (sends results forward)
 # ─────────────────────────────────────────
 producer = KafkaProducer(
-    bootstrap_servers="localhost:9092",
+    bootstrap_servers="kafka:9092",
     value_serializer=lambda v: json.dumps(v).encode("utf-8"),
 )
 
 # ─────────────────────────────────────────
-# 4. Main Processing Loop
+# 5. Main Processing Loop
 # ─────────────────────────────────────────
 print("Waiting for messages from Kafka...\n")
 
