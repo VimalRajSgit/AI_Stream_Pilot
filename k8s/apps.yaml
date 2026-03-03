@@ -1,0 +1,68 @@
+# ─────────────────────────────────────────
+# Producer Deployment
+# ─────────────────────────────────────────
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: producer
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: producer
+  template:
+    metadata:
+      labels:
+        app: producer
+    spec:
+      containers:
+        - name: producer
+          image: kafka_kubernets_agents-producer:latest
+          imagePullPolicy: Never # use local minikube image
+          command: ["python", "producer.py"]
+---
+# ─────────────────────────────────────────
+# AI Processor Deployment
+# ─────────────────────────────────────────
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ai-processor
+spec:
+  replicas: 1 # KEDA will scale this up/down
+  selector:
+    matchLabels:
+      app: ai-processor
+  template:
+    metadata:
+      labels:
+        app: ai-processor
+    spec:
+      containers:
+        - name: ai-processor
+          image: kafka_kubernets_agents-ai_processor:latest
+          imagePullPolicy: Never # use local minikube image
+          command: ["python", "ai_processor.py"]
+---
+# ─────────────────────────────────────────
+# Consumer Deployment
+# ─────────────────────────────────────────
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: consumer
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: consumer
+  template:
+    metadata:
+      labels:
+        app: consumer
+    spec:
+      containers:
+        - name: consumer
+          image: kafka_kubernets_agents-consumer:latest
+          imagePullPolicy: Never # use local minikube image
+          command: ["python", "consumer.py"]
